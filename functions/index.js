@@ -1,47 +1,43 @@
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
-admin.initializeApp();
+// --- CÓDIGO PARA EL CLIENTE (Tu página web / index.html o main.js) ---
 
-// Automatizar alerta de Tareas
-exports.sendTaskNotification = functions.firestore
-  .document("tasks/{taskId}")
-  .onCreate(async (snapshot, context) => {
-    const task = snapshot.data();
-    const author = task.author;
-    const recipient = author === "Josué" ? "Mi Esposita" : "Josué";
+// 1. Guardar una nueva tarea (esto disparará automáticamente la notificación)
+async function crearNuevaTarea(e) {
+  e.preventDefault(); // Si viene de un formulario
+  
+  const tituloInput = document.getElementById("input-tarea"); // ID de tu input en HTML
+  const titulo = tituloInput.value;
+  const autorActual = "Josué"; // O el usuario que haya iniciado sesión ("Josué" o "Mi Esposita")
 
-    const tokenDoc = await admin.firestore().collection("user_tokens").doc(recipient).get();
-    if (!tokenDoc.exists) return null;
+  try {
+    await db.collection("tasks").add({
+      title: titulo,
+      author: autorActual,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    console.log("¡Tarea creada con éxito en Firestore!");
+    tituloInput.value = ""; // Limpiar input
+  } catch (error) {
+    console.error("Error al crear la tarea:", error);
+  }
+}
 
-    const token = tokenDoc.data().token;
-    const payload = {
-      notification: {
-        title: `📋 Nueva Tarea de ${author}`,
-        body: task.title,
-        icon: "https://cdn-icons-png.flaticon.com/512/1077/1077035.png"
-      }
-    };
-    return admin.messaging().sendToDevice(token, payload);
-  });
+// 2. Enviar un mensaje de chat (esto disparará automáticamente la notificación)
+async function enviarMensajeChat(e) {
+  e.preventDefault(); // Si viene de un formulario
+  
+  const mensajeInput = document.getElementById("input-mensaje"); // ID de tu input de chat
+  const textoMensaje = mensajeInput.value;
+  const remitenteActual = "Josué"; // O "Mi Esposita"
 
-// Automatizar alerta de Chat
-exports.sendChatNotification = functions.firestore
-  .document("chat/{chatId}")
-  .onCreate(async (snapshot, context) => {
-    const msg = snapshot.data();
-    const sender = msg.sender;
-    const recipient = sender === "Josué" ? "Mi Esposita" : "Josué";
-
-    const tokenDoc = await admin.firestore().collection("user_tokens").doc(recipient).get();
-    if (!tokenDoc.exists) return null;
-
-    const token = tokenDoc.data().token;
-    const payload = {
-      notification: {
-        title: `💬 Nuevo mensaje de ${sender}`,
-        body: msg.text || "Te ha enviado una foto 📷",
-        icon: "https://cdn-icons-png.flaticon.com/512/1077/1077035.png"
-      }
-    };
-    return admin.messaging().sendToDevice(token, payload);
-  });
+  try {
+    await db.collection("chat").add({
+      text: textoMensaje,
+      sender: remitenteActual,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    console.log("¡Mensaje enviado con éxito a Firestore!");
+    mensajeInput.value = ""; // Limpiar input
+  } catch (error) {
+    console.error("Error al enviar el mensaje:", error);
+  }
+}
