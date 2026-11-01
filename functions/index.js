@@ -1,43 +1,105 @@
-// --- CÓDIGO PARA EL CLIENTE (Tu página web / index.html o main.js) ---
+const functions = require("firebase-functions");
+const admin = require("firebase-admin");
+admin.initializeApp();
 
-// 1. Guardar una nueva tarea (esto disparará automáticamente la notificación)
-async function crearNuevaTarea(e) {
-  e.preventDefault(); // Si viene de un formulario
-  
-  const tituloInput = document.getElementById("input-tarea"); // ID de tu input en HTML
-  const titulo = tituloInput.value;
-  const autorActual = "Josué"; // O el usuario que haya iniciado sesión ("Josué" o "Mi Esposita")
+const db = admin.firestore();
 
-  try {
-    await db.collection("tasks").add({
-      title: titulo,
-      author: autorActual,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    console.log("¡Tarea creada con éxito en Firestore!");
-    tituloInput.value = ""; // Limpiar input
-  } catch (error) {
-    console.error("Error al crear la tarea:", error);
-  }
-}
+// 1. Notificación automática al crear una Tarea
+exports.sendTaskNotification = functions.firestore
+  .document("tasks/{taskId}")
+  .onCreate(async (snapshot, context) => {
+    try {
+      const task = snapshot.data();
+      const author = task.author; // "Josué" o "Mi Esposita"
+      const title = task.title || "Nueva tarea asignada";
 
-// 2. Enviar un mensaje de chat (esto disparará automáticamente la notificación)
-async function enviarMensajeChat(e) {
-  e.preventDefault(); // Si viene de un formulario
-  
-  const mensajeInput = document.getElementById("input-mensaje"); // ID de tu input de chat
-  const textoMensaje = mensajeInput.value;
-  const remitenteActual = "Josué"; // O "Mi Esposita"
+      // Determinar el destinatario opuesto
+      const recipient = author === "Josué" ? "Mi Esposita" : "Josué";
 
-  try {
-    await db.collection("chat").add({
-      text: textoMensaje,
-      sender: remitenteActual,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    console.log("¡Mensaje enviado con éxito a Firestore!");
-    mensajeInput.value = ""; // Limpiar input
-  } catch (error) {
-    console.error("Error al enviar el mensaje:", error);
-  }
-}
+      // Buscar el token del destinatario en la colección user_tokens
+      const tokenDoc = await db.collection("user_tokens").doc(recipient).get();
+
+      if (!tokenDoc.exists) {
+        console.log(`No se encontró token para el destinatario: ${recipient}`);
+        return null;
+      }
+
+      const fcmToken = tokenDoc.data().token;
+
+      if (!fcmToken) {
+        console.log(`El token de ${recipient} está vacío.`);
+        return null;
+      }
+
+      // Estructura del mensaje de notificación
+      const message = {
+        token: fcmToken,
+        notification: {
+          title: `Nueva tarea de ${author}`,
+          body: title,
+        },
+        data: {
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+          type: "task",
+        },
+      };
+
+      // Enviar la notificación mediante Firebase Cloud Messaging
+      const response = await admin.messaging().send(message);
+      console.log("Notificación de tarea enviada con éxito:", response);
+      return null;
+    } catch (error) {
+      console.error("Error al enviar la notificación de tarea:", error);
+      return null;
+    }
+  });
+
+// 2. Notificación automática al enviar un Mensaje de Chat
+exports.sendChatNotification = functions.firestore
+  .document("chat/{messageId}")
+  .onCreate(async (snapshot, context) => {
+    try {
+      const chatMessage = snapshot.data();
+      const sender = chatMessage.sender; // "Josué" o "Mi Esposita"
+      const text = chatMessage.text || "Nuevo mensaje";
+
+      // Determinar el destinatario opuesto
+      const recipient = sender === "Josué" ? "Mi Esposita" : "Josué";
+
+      // Buscar el token del destinatario en la colección user_tokens
+      const tokenDoc = await db.collection("user_tokens").doc(recipient).get();
+
+      if (!tokenDoc.exists) {
+        console.log(`No se encontró token para el destinatario: ${recipient}`);
+        return null;
+      }
+
+      const fcmToken = tokenDoc.data().token;
+
+      if (!fcmToken) {
+        console.log(`El token de ${recipient} está vacío.`);
+        return null;
+      }
+
+      // Estructura del mensaje de notificación
+      const message = {
+        token: fcmToken,
+        notification: {
+          title: `Mensaje de ${sender}`,
+          body: text,
+        },
+        data: {
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+          type: "chat",
+        },
+      };
+
+      // Enviar la notificación mediante Firebase Cloud Messaging
+      const response = await admin.messaging().send(message);
+      console.log("Notificación de chat enviada con éxito:", response);
+      return null;
+    } catch (error) {
+      console.error("Error al enviar la notificación de chat:", error);
+      return null;
+    }
+  });
